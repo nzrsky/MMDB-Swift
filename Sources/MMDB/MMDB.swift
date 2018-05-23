@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import libmaxminddb
 
 public struct MMDBContinent {
     public var code: String?
