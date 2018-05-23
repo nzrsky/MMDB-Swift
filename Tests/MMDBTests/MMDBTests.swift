@@ -6,7 +6,7 @@ class MMDBTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        database = MMDB()
+        database = MMDB("./Tests/MMDBTests/GeoLite2-Country.mmdb")
     }
 
     func testExample() {
