@@ -1,9 +1,8 @@
 //
 //  MMDB.swift
 //  MMDB
-//
-//  Created by Lex on 12/16/15.
-//  Copyright © 2017 lexrus.com. All rights reserved.
+// 
+//  Originally created by Lex on 12/16/15.
 //
 
 import Foundation
@@ -75,14 +74,14 @@ final public class MMDB {
     fileprivate typealias ListPtr = UnsafeMutablePointer<MMDB_entry_data_list_s>
     fileprivate typealias StringPtr = UnsafeMutablePointer<String>
 
-    public init?(_ filename: String? = nil) {
-        if let filename = filename, openDB(atPath: filename) { return }
-
-        let path = Bundle(for: MMDB.self).path(forResource: "GeoLite2-Country", ofType: "mmdb")
-        if let path = path, openDB(atPath: path) { return }
-
-        return nil
+    public init?(_ filename: String) {
+        if openDB(atPath: filename) {
+            return
+        } else {
+            return nil
+        }
     }
+
     private func openDB(atPath: String) -> Bool {
         let cfilename = (atPath as NSString).utf8String
         let cfilenamePtr = UnsafePointer<Int8>(cfilename)
