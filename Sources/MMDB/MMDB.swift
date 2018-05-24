@@ -83,7 +83,7 @@ final public class MMDB {
     }
 
     private func openDB(atPath: String) -> Bool {
-        let cfilename = (atPath as NSString).utf8String
+        let cfilename = atPath.cString(using: String.Encoding.utf8)
         let cfilenamePtr = UnsafePointer<Int8>(cfilename)
         let status = MMDB_open(cfilenamePtr, UInt32(MMDB_MODE_MASK), &db)
         if status != MMDB_SUCCESS {
@@ -95,11 +95,12 @@ final public class MMDB {
     }
 
     fileprivate func lookupString(_ s: String) -> MMDB_lookup_result_s? {
-        let string = (s as NSString).utf8String
+        let string = s.cString(using: String.Encoding.utf8)
         let stringPtr = UnsafePointer<Int8>(string)
 
         var gaiError: Int32 = 0
         var error: Int32 = 0
+        let noErr: Int32 = 0
 
         let result = MMDB_lookup_string(&db, stringPtr, &gaiError, &error)
         if gaiError == noErr && error == noErr {
