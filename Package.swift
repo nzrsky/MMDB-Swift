@@ -1,15 +1,29 @@
-// swift-tools-version:4.0
+// swift-tools-version:5.7
+
 import PackageDescription
 
+let name = "MMDB"
+
 let package = Package(
-    name: "MMDB",
+    name: name,
+    platforms: [
+        .macOS(.v10_15), .iOS(.v13)
+    ],
     products: [
-        .library(name: "MMDB", targets: ["MMDB"]),
+        .library(name: name, targets: [name])
     ],
     dependencies: [],
     targets: [
-        .target(name: "MMDB", dependencies: ["libmaxminddb"]),
-        .testTarget(name: "MMDBTests", dependencies: ["MMDB"]),
-        .target(name: "libmaxminddb")
+        .target(
+            name: name,
+            dependencies: ["libmaxminddb"]
+        ),
+        
+        .target(name: "libmaxminddb"),
+        
+        .testTarget(
+            name: "\(name)Tests",
+            dependencies: [.byName(name: name)]
+        )
     ]
 )

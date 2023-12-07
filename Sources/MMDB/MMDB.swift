@@ -1,7 +1,7 @@
 //
 //  MMDB.swift
 //  MMDB
-// 
+//
 //  Originally created by Lex on 12/16/15.
 //
 
@@ -20,21 +20,21 @@ public struct MMDBCountry: CustomStringConvertible {
 
     init(dictionary: NSDictionary) {
         if let dict = dictionary["continent"] as? NSDictionary,
-            let code = dict["code"] as? String,
-            let continentNames = dict["names"] as? [String: String]
+           let code = dict["code"] as? String,
+           let continentNames = dict["names"] as? [String: String]
         {
             continent.code = code
             continent.names = continentNames
         }
         if let dict = dictionary["country"] as? NSDictionary,
-            let iso = dict["iso_code"] as? String,
-            let countryNames = dict["names"] as? [String: String]
+           let iso = dict["iso_code"] as? String,
+           let countryNames = dict["names"] as? [String: String]
         {
             self.isoCode = iso
             self.names = countryNames
         }
     }
-    
+
     public var description: String {
         var s = "{\n"
         s += "  \"continent\": {\n"
@@ -82,31 +82,34 @@ final public class MMDB {
         }
     }
 
-    private func openDB(atPath: String) -> Bool {
-        let cfilename = atPath.cString(using: String.Encoding.utf8)
-        let cfilenamePtr = UnsafePointer<Int8>(cfilename)
-        let status = MMDB_open(cfilenamePtr, UInt32(MMDB_MODE_MASK), &db)
-        if status != MMDB_SUCCESS {
-            print(String(cString: MMDB_strerror(errno)))
-            return false
-        } else {
+    private func openDB(atPath path: String) -> Bool {
+        return path.withCString { cPath -> Bool in
+            let status = MMDB_open(cPath, UInt32(MMDB_MODE_MMAP), &db)
+            if status != MMDB_SUCCESS {
+                if let errorString = String(validatingUTF8: MMDB_strerror(errno)) {
+                    print(errorString)
+                }
+                return false
+            }
             return true
         }
     }
 
     fileprivate func lookupString(_ s: String) -> MMDB_lookup_result_s? {
-        let string = s.cString(using: String.Encoding.utf8)
-        let stringPtr = UnsafePointer<Int8>(string)
-
+        var result: MMDB_lookup_result_s?
         var gaiError: Int32 = 0
-        var error: Int32 = 0
+        var mmdbError: Int32 = 0
         let noErr: Int32 = 0
 
-        let result = MMDB_lookup_string(&db, stringPtr, &gaiError, &error)
-        if gaiError == noErr && error == noErr {
-            return result
+        s.withCString { cStringPtr in
+            result = MMDB_lookup_string(&db, cStringPtr, &gaiError, &mmdbError)
         }
-        return nil
+
+        if gaiError == noErr && mmdbError == noErr, let lookupResult = result {
+            return lookupResult
+        } else {
+            return nil
+        }
     }
 
     fileprivate func getString(_ list: ListPtr) -> String {
@@ -146,15 +149,15 @@ final public class MMDB {
 
         return country
     }
-    
+
     private func dump(list: ListPtr?) -> (ptr: ListPtr?, out: Any?) {
         var list = list
         switch getType(list!) {
-            
+
         case MMDB_DATA_TYPE_MAP:
             let dict = NSMutableDictionary()
             var size = getSize(list!)
-            
+
             list = list?.pointee.next
             while size > 0 && list != nil {
                 let key = getString(list!)
@@ -169,12 +172,12 @@ final public class MMDB {
                 size -= 1
             }
             return (ptr: list, out: dict)
-            
+
         case MMDB_DATA_TYPE_UTF8_STRING:
             let str = getString(list!)
             list = list?.pointee.next
             return (ptr: list, out: str)
-            
+
         case MMDB_DATA_TYPE_UINT32:
             var res: NSNumber = 0
             if let entryData = list?.pointee.entry_data {
@@ -186,28 +189,37 @@ final public class MMDB {
             }
             list = list?.pointee.next
             return (ptr: list, out: res)
-            
+
         default: ()
-            
+
         }
         return (ptr: list, out: nil)
     }
-    
+
     public func lookup(ip: String) -> NSDictionary? {
         guard let result = lookupString(ip) else {
             return nil
         }
-        
+
         var entry = result.entry
-        var list: ListPtr?
+        var list: ListPtr? = nil
         let status = MMDB_get_entry_data_list(&entry, &list)
-        if status != MMDB_SUCCESS {
+        defer {
+            if let list = list {
+                MMDB_free_entry_data_list(list)
+            }
+        }
+        guard status == MMDB_SUCCESS, let listUnwrapped = list else {
             return nil
         }
-        let res = self.dump(list: list)
-        if let dict = res.out, let d = dict as? NSDictionary {
-            return d
+
+        let res = self.dump(list: listUnwrapped)
+        // No need to free the list here, as it's handled by the defer block above
+
+        if let dict = res.out as? NSDictionary {
+            return dict
         }
+
         return nil
     }
 
