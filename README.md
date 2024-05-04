@@ -1,5 +1,7 @@
 # MMDB-Swift
 
+Fork with patches and Swift5 support
+
 A tiny wrapper for [libmaxminddb](https://github.com/maxmind/libmaxminddb) which allows you to lookup Geo data by IP address.
 
 This product uses [GeoLite2 data](http://dev.maxmind.com/geoip/geoip2/geolite2/) created by MaxMind, available from [http://www.maxmind.com](http://www.maxmind.com).
