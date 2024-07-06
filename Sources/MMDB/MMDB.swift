@@ -17,10 +17,6 @@ public final class MMDB {
         public let iso: String
     }
 
-    public protocol DataValue {
-        static func value(from: MMDB_entry_data_s) -> Self
-    }
-
     public enum DataType: UInt32 {
         case extended = 0
         case pointer = 1
@@ -103,7 +99,7 @@ public final class MMDB {
                 self.entry = value
             }
 
-            func value<T: MMDB.DataValue>() -> T? {
+            func value<T: MMDBDataValue>() -> T? {
                 entry.has_data ? T.value(from: entry) : nil
             }
 
@@ -309,25 +305,29 @@ extension MMDB {
     }
 }
 
-extension Float: MMDB.DataValue {
+public protocol MMDBDataValue {
+    static func value(from: MMDB_entry_data_s) -> Self
+}
+
+extension Float: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         entry.float_value
     }
 }
 
-extension Double: MMDB.DataValue {
+extension Double: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         entry.double_value
     }
 }
 
-extension Bool: MMDB.DataValue {
+extension Bool: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         entry.boolean
     }
 }
 
-extension String: MMDB.DataValue {
+extension String: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         String(
             bytesNoCopy: UnsafeMutableRawPointer(mutating: entry.utf8_string),
@@ -338,37 +338,37 @@ extension String: MMDB.DataValue {
     }
 }
 
-extension Int32: MMDB.DataValue {
+extension Int32: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         entry.int32
     }
 }
 
-extension UInt16: MMDB.DataValue {
+extension UInt16: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         entry.uint16
     }
 }
 
-extension UInt32: MMDB.DataValue {
+extension UInt32: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         entry.uint32
     }
 }
 
-extension UInt64: MMDB.DataValue {
+extension UInt64: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         entry.uint64
     }
 }
 
-extension Data: MMDB.DataValue {
+extension Data: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         .init(bytes: entry.bytes, count: Int(entry.data_size))
     }
 }
 
-extension UnsafePointer: MMDB.DataValue {
+extension UnsafePointer: MMDBDataValue {
     public static func value(from entry: MMDB_entry_data_s) -> Self {
         // .init(entry.pointer.assumingMemoryBound(to: Pointee.self))
         fatalError("unimplemented")
