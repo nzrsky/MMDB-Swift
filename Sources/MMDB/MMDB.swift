@@ -262,28 +262,46 @@ extension MMDB {
         case idnEncode
         case unknown
 
-        private static let mapping: [Int32: GetAddrInfoError] = [
-            EAI_AGAIN : .again,
-            EAI_BADFLAGS : .badFlags,
-            EAI_FAIL : .fail,
-            EAI_FAMILY : .family,
-            EAI_MEMORY : .memory,
-            EAI_NONAME : .noname,
-            EAI_SERVICE : .service,
-            EAI_SOCKTYPE : .sockType,
-            EAI_SYSTEM : .system,
-            EAI_OVERFLOW : .overflow,
-            EAI_NODATA : .nodata,
-            EAI_ADDRFAMILY : .addrFamily,
-            EAI_BADHINTS : .badHints,
-            EAI_PROTOCOL : .protocol
-            // EAI_INPROGRESS : .inProgress,
-            // EAI_CANCELED : .canceled,
-            // EAI_NOTCANCELED : .notCanceled,
-            // EAI_ALLDONE : .allDone,
-            // EAI_INTR : .interrupted,
-            // EAI_IDN_ENCODE : .idnEncode
-        ]
+        private static let mapping: [Int32: GetAddrInfoError] = {
+            #if os(macOS)
+            [
+                EAI_AGAIN : .again,
+                EAI_BADFLAGS : .badFlags,
+                EAI_FAIL : .fail,
+                EAI_FAMILY : .family,
+                EAI_MEMORY : .memory,
+                EAI_NONAME : .noname,
+                EAI_SERVICE : .service,
+                EAI_SOCKTYPE : .sockType,
+                EAI_SYSTEM : .system,
+                EAI_OVERFLOW : .overflow,
+                EAI_NODATA : .nodata,
+                EAI_ADDRFAMILY : .addrFamily,
+                EAI_BADHINTS : .badHints,
+                EAI_PROTOCOL : .protocol
+            ]
+            #else
+            [
+                EAI_AGAIN : .again,
+                EAI_BADFLAGS : .badFlags,
+                EAI_FAIL : .fail,
+                EAI_FAMILY : .family,
+                EAI_MEMORY : .memory,
+                EAI_NONAME : .noname,
+                EAI_SERVICE : .service,
+                EAI_SOCKTYPE : .sockType,
+                EAI_SYSTEM : .system,
+                EAI_OVERFLOW : .overflow,
+
+                // EAI_INPROGRESS : .inProgress,
+                // EAI_CANCELED : .canceled,
+                // EAI_NOTCANCELED : .notCanceled,
+                // EAI_ALLDONE : .allDone,
+                // EAI_INTR : .interrupted,
+                // EAI_IDN_ENCODE : .idnEncode
+            ]
+            #endif
+        }()
 
         init(int32: Int32) {
             self = Self.mapping[int32] ?? .unknown
