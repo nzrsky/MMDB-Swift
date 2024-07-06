@@ -23,7 +23,10 @@ let package = Package(
         
         .testTarget(
             name: "\(name)Tests",
-            dependencies: [.byName(name: name)]
+            dependencies: [.target(name: name)],
+            resources: [
+                .copy("Resources/GeoLite2-Country.mmdb")
+            ]
         )
     ]
 )

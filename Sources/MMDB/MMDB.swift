@@ -1,230 +1,378 @@
 //
-//  MMDB.swift
-//  MMDB
-//
-//  Originally created by Lex on 12/16/15.
+//  Copyright(c) 2024, Alex Nazarov
 //
 
 import Foundation
 import libmaxminddb
 
-public struct MMDBContinent {
-    public var code: String?
-    public var names: [String: String]?
-}
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
-public struct MMDBCountry: CustomStringConvertible {
-    public var continent = MMDBContinent()
-    public var isoCode = ""
-    public var names = [String: String]()
+public final class MMDB {
 
-    init(dictionary: NSDictionary) {
-        if let dict = dictionary["continent"] as? NSDictionary,
-           let code = dict["code"] as? String,
-           let continentNames = dict["names"] as? [String: String]
-        {
-            continent.code = code
-            continent.names = continentNames
-        }
-        if let dict = dictionary["country"] as? NSDictionary,
-           let iso = dict["iso_code"] as? String,
-           let countryNames = dict["names"] as? [String: String]
-        {
-            self.isoCode = iso
-            self.names = countryNames
-        }
+    public struct Country {
+        public let iso: String
     }
 
-    public var description: String {
-        var s = "{\n"
-        s += "  \"continent\": {\n"
-        s += "    \"code\": \"" + (self.continent.code ?? "") + "\",\n"
-        s += "    \"names\": {\n"
-        var i = continent.names?.count ?? 0
-        continent.names?.forEach {
-            s += "      \""
-            s += $0.0 + "\": \""
-            s += $0.1 + "\""
-            s += (i > 1 ? "," : "")
-            s += "\n"
-            i -= 1
-        }
-        s += "    }\n"
-        s += "  },\n"
-        s += "  \"isoCode\": \"" + self.isoCode + "\",\n"
-        s += "  \"names\": {\n"
-        i = names.count
-        names.forEach {
-            s += "    \""
-            s += $0.0 + "\": \""
-            s += $0.1 + "\""
-            s += (i > 1 ? "," : "")
-            s += "\n"
-            i -= 1
-        }
-        s += "  }\n}"
-        return s
-    }
-}
-
-final public class MMDB {
-
-    fileprivate var db = MMDB_s()
-
-    fileprivate typealias ListPtr = UnsafeMutablePointer<MMDB_entry_data_list_s>
-    fileprivate typealias StringPtr = UnsafeMutablePointer<String>
-
-    public init?(_ filename: String) {
-        if openDB(atPath: filename) {
-            return
-        } else {
-            return nil
-        }
+    public protocol DataValue {
+        static func value(from: MMDB_entry_data_s) -> Self
     }
 
-    private func openDB(atPath path: String) -> Bool {
-        return path.withCString { cPath -> Bool in
-            let status = MMDB_open(cPath, UInt32(MMDB_MODE_MMAP), &db)
-            if status != MMDB_SUCCESS {
-                if let errorString = String(validatingUTF8: MMDB_strerror(errno)) {
-                    print(errorString)
-                }
-                return false
-            }
-            return true
-        }
+    public enum DataType: UInt32 {
+        case extended = 0
+        case pointer = 1
+        case utf8String = 2
+        case double = 3
+        case bytes = 4
+        case uint16 = 5
+        case uint32 = 6
+        case map = 7
+        case int32 = 8
+        case uint64 = 9
+        case uint128 = 10
+        case array = 11
+        case container = 12
+        case endMarker = 13
+        case boolean = 14
+        case float = 15
     }
 
-    fileprivate func lookupString(_ s: String) -> MMDB_lookup_result_s? {
-        var result: MMDB_lookup_result_s?
-        var gaiError: Int32 = 0
-        var mmdbError: Int32 = 0
-        let noErr: Int32 = 0
+    private var db = MMDB_s()
 
-        s.withCString { cStringPtr in
-            result = MMDB_lookup_string(&db, cStringPtr, &gaiError, &mmdbError)
+    public init(_ databasePath: String = Bundle.main.path(forResource: "GeoLite2-Country", ofType: "mmdb") ?? "") throws {
+        let status = MMDB_open(databasePath, UInt32(MMDB_MODE_MMAP), &db)
+
+        guard status == MMDB_SUCCESS else {
+            printErrno(msg: "Failed to open database")
+            throw MMDBError(rawValue: status) ?? .unknown
         }
-
-        if gaiError == noErr && mmdbError == noErr, let lookupResult = result {
-            return lookupResult
-        } else {
-            return nil
-        }
-    }
-
-    fileprivate func getString(_ list: ListPtr) -> String {
-        var data = list.pointee.entry_data
-        let type = (Int32)(data.type)
-
-        // Ignore other useless keys
-        guard data.has_data && type == MMDB_DATA_TYPE_UTF8_STRING else {
-            return ""
-        }
-
-        let str = MMDB_get_entry_data_char(&data)
-        let size = size_t(data.data_size)
-        let cKey = mmdb_strndup(str, size)
-        let key = String(cString: cKey!)
-        free(cKey)
-
-        return key
-    }
-
-    fileprivate func getType(_ list: ListPtr) -> Int32 {
-        let data = list.pointee.entry_data
-        return (Int32)(data.type)
-    }
-
-    fileprivate func getSize(_ list: ListPtr) -> UInt32 {
-        return list.pointee.entry_data.data_size
-    }
-
-
-    public func lookup(_ IPString: String) -> MMDBCountry? {
-        guard let dict = lookup(ip: IPString) else {
-            return nil
-        }
-
-        let country = MMDBCountry(dictionary: dict)
-
-        return country
-    }
-
-    private func dump(list: ListPtr?) -> (ptr: ListPtr?, out: Any?) {
-        var list = list
-        switch getType(list!) {
-
-        case MMDB_DATA_TYPE_MAP:
-            let dict = NSMutableDictionary()
-            var size = getSize(list!)
-
-            list = list?.pointee.next
-            while size > 0 && list != nil {
-                let key = getString(list!)
-                list = list?.pointee.next
-                let sub = dump(list: list)
-                list = sub.ptr
-                if let out = sub.out, key.count > 0 {
-                    dict[key] = out
-                } else {
-                    break
-                }
-                size -= 1
-            }
-            return (ptr: list, out: dict)
-
-        case MMDB_DATA_TYPE_UTF8_STRING:
-            let str = getString(list!)
-            list = list?.pointee.next
-            return (ptr: list, out: str)
-
-        case MMDB_DATA_TYPE_UINT32:
-            var res: NSNumber = 0
-            if let entryData = list?.pointee.entry_data {
-                var mutableEntryData = entryData
-                if let uint = MMDB_get_entry_data_uint32(&mutableEntryData) {
-                    let v: UInt32 = uint.pointee
-                    res = NSNumber(value: v)
-                }
-            }
-            list = list?.pointee.next
-            return (ptr: list, out: res)
-
-        default: ()
-
-        }
-        return (ptr: list, out: nil)
-    }
-
-    public func lookup(ip: String) -> NSDictionary? {
-        guard let result = lookupString(ip) else {
-            return nil
-        }
-
-        var entry = result.entry
-        var list: ListPtr? = nil
-        let status = MMDB_get_entry_data_list(&entry, &list)
-        defer {
-            if let list = list {
-                MMDB_free_entry_data_list(list)
-            }
-        }
-        guard status == MMDB_SUCCESS, let listUnwrapped = list else {
-            return nil
-        }
-
-        let res = self.dump(list: listUnwrapped)
-        // No need to free the list here, as it's handled by the defer block above
-
-        if let dict = res.out as? NSDictionary {
-            return dict
-        }
-
-        return nil
     }
 
     deinit {
         MMDB_close(&db)
     }
 
+    public func lookup(ip: String) throws -> LookupResult? {
+        var gaiError: Int32 = 0
+        var mmdbStatus: Int32 = 0
+
+        let result = MMDB_lookup_string(&db, ip, &gaiError, &mmdbStatus)
+
+        guard mmdbStatus == MMDB_SUCCESS else {
+            guard gaiError == 0 else {
+                printErr("error: getaddrinfo failed: \(String(validatingUTF8: gai_strerror(gaiError)) ?? "#\(gaiError)")")
+                throw MMDB.GetAddrInfoError(int32: gaiError)
+            }
+
+            printErr("error: lookup failed: \(String(validatingUTF8: MMDB_strerror(mmdbStatus)) ?? "#\(mmdbStatus)")")
+            throw MMDBError(rawValue: mmdbStatus) ?? .unknown
+        }
+
+        return result.found_entry ? try LookupResult(result) : nil
+    }
+
+    public class LookupResult {
+        private var result: MMDB_lookup_result_s
+        private var entryDataList: UnsafeMutablePointer<MMDB_entry_data_list_s>?
+
+        init(_ result: MMDB_lookup_result_s) throws {
+            self.result = result
+
+            let status = MMDB_get_entry_data_list(&self.result.entry, &entryDataList)
+            guard status == MMDB_SUCCESS else {
+                printErr("error: lookup failed: \(String(validatingUTF8: MMDB_strerror(status)) ?? "#\(status)")")
+                throw MMDB.MMDBError(rawValue: status) ?? .unknown
+            }
+
+            try? dump()
+        }
+
+        deinit {
+            if entryDataList != nil {
+                MMDB_free_entry_data_list(entryDataList)
+            }
+        }
+
+        public struct Entry {
+            private let entry: MMDB_entry_data_s
+
+            init(value: MMDB_entry_data_s) {
+                self.entry = value
+            }
+
+            func value<T: MMDB.DataValue>() -> T? {
+                entry.has_data ? T.value(from: entry) : nil
+            }
+
+            func value() -> Any? {
+                DataType(rawValue: entry.type).flatMap {
+                    switch $0 {
+                    case .boolean:
+                        value() as Bool?
+                    case .int32:
+                        value() as Int32?
+                    case .uint32:
+                        value() as UInt32?
+                    case .uint16:
+                        value() as UInt16?
+                    case .uint64:
+                        value() as UInt64?
+                    case .float:
+                        value() as Float?
+                    case .double:
+                        value() as Double?
+                    case .pointer:
+                        value() as UnsafePointer<Int32>?
+                    case .utf8String:
+                        value() as String?
+                    case .extended:
+                        { assertionFailure("unimplemented"); return nil }()
+                    case .bytes:
+                        { assertionFailure("unimplemented"); return nil }()
+                    case .map:
+                        { assertionFailure("unimplemented"); return nil }()
+                    case .uint128:
+                        { assertionFailure("unimplemented"); return nil }()
+                    case .array:
+                        { assertionFailure("unimplemented"); return nil }()
+                    case .container:
+                        { assertionFailure("unimplemented"); return nil }()
+                    case .endMarker:
+                        { assertionFailure("unimplemented"); return nil }()
+                    }
+                }
+            }
+        }
+    }
+}
+
+extension MMDB.LookupResult: Sequence {
+    public struct Iterator: IteratorProtocol {
+        private var current: UnsafeMutablePointer<MMDB_entry_data_list_s>?
+
+        init(start: UnsafeMutablePointer<MMDB_entry_data_list_s>?) {
+            self.current = start
+        }
+
+        mutating public func next() -> Entry? {
+            guard let currentEntry = current else { return nil }
+
+            let entry = Entry(value: currentEntry.pointee.entry_data)
+            current = currentEntry.pointee.next
+            return entry
+        }
+    }
+
+    public func makeIterator() -> Iterator {
+        Iterator(start: entryDataList)
+    }
+}
+
+extension MMDB.LookupResult {
+    #if canImport(Darwin) || canImport(Glibc)
+    public func dump() throws {
+        let status = MMDB_dump_entry_data_list(stdout, entryDataList, 0)
+
+        guard status == MMDB_SUCCESS else {
+            printErrno(msg: "Failed to open database")
+            throw MMDB.MMDBError(rawValue: status) ?? .unknown
+        }
+    }
+    #endif
+
+    public func country() throws -> MMDB.Country? {
+        var entry = MMDB_entry_data_s()
+        
+        var pathKeys = allocPathKeys("country", "iso_code", nil)
+        let status = MMDB_aget_value(&result.entry, &entry, &pathKeys)
+        defer { deallocPathKeys(pathKeys) }
+
+        guard status == MMDB_SUCCESS else {
+            printErr("error: lookup failed: \(String(validatingUTF8: MMDB_strerror(status)) ?? "#\(status)")")
+            throw MMDB.MMDBError(rawValue: status) ?? .unknown
+        }
+
+        guard let iso = Entry(value: entry).value() as? String else {
+            return nil
+        }
+
+        return .init(iso: iso)
+    }
+
+    private func allocPathKeys(_ args: String?...) -> [UnsafePointer<CChar>?] {
+        args.map { arg in arg.map { UnsafePointer<CChar>(strdup($0)) } }
+    }
+
+    private func deallocPathKeys(_ pathKeys: [UnsafePointer<CChar>?]) {
+        pathKeys.forEach {
+            if $0 != nil { free(UnsafeMutableRawPointer(mutating: $0)) }
+        }
+    }
+}
+
+private func printErr(_ string: String) {
+    if let data = string.data(using: .utf8) {
+        FileHandle.standardError.write(data)
+    }
+}
+
+private func printErrno(msg: String) {
+    printErr("error: \(msg) \(String(validatingUTF8: MMDB_strerror(errno)).map { "(\($0))" } ?? "")")
+}
+
+extension MMDB {
+    public enum MMDBError: Int32, Error {
+        case fileOpen = 1
+        case corruptSearchTree = 2
+        case invalidMetadata = 3
+        case io = 4
+        case outOfMemory = 5
+        case unknownDatabaseFormat = 6
+        case invalidData = 7
+        case invalidLookupPath = 8
+        case lookupPathDoesNotMatchData = 9
+        case invalidNodeNumber = 10
+        case ipv6LookupInIPv4Database = 11
+        case unknown = -1
+    }
+
+    public enum GetAddrInfoError: Error {
+        case again
+        case badFlags
+        case fail
+        case family
+        case memory
+        case noname
+        case service
+        case sockType
+        case system
+        case overflow
+        case nodata
+        case addrFamily
+        case badHints
+        case `protocol`
+        case inProgress
+        case canceled
+        case notCanceled
+        case allDone
+        case interrupted
+        case idnEncode
+        case unknown
+
+        private static let mapping: [Int32: GetAddrInfoError] = [
+            EAI_AGAIN : .again,
+            EAI_BADFLAGS : .badFlags,
+            EAI_FAIL : .fail,
+            EAI_FAMILY : .family,
+            EAI_MEMORY : .memory,
+            EAI_NONAME : .noname,
+            EAI_SERVICE : .service,
+            EAI_SOCKTYPE : .sockType,
+            EAI_SYSTEM : .system,
+            EAI_OVERFLOW : .overflow,
+            EAI_NODATA : .nodata,
+            EAI_ADDRFAMILY : .addrFamily,
+            EAI_BADHINTS : .badHints,
+            EAI_PROTOCOL : .protocol
+            // EAI_INPROGRESS : .inProgress,
+            // EAI_CANCELED : .canceled,
+            // EAI_NOTCANCELED : .notCanceled,
+            // EAI_ALLDONE : .allDone,
+            // EAI_INTR : .interrupted,
+            // EAI_IDN_ENCODE : .idnEncode
+        ]
+
+        init(int32: Int32) {
+            self = Self.mapping[int32] ?? .unknown
+        }
+    }
+}
+
+extension Float: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        entry.float_value
+    }
+}
+
+extension Double: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        entry.double_value
+    }
+}
+
+extension Bool: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        entry.boolean
+    }
+}
+
+extension String: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        String(
+            bytesNoCopy: UnsafeMutableRawPointer(mutating: entry.utf8_string),
+            length: Int(entry.data_size),
+            encoding: .utf8,
+            freeWhenDone: false
+        ) ?? ""
+    }
+}
+
+extension Int32: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        entry.int32
+    }
+}
+
+extension UInt16: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        entry.uint16
+    }
+}
+
+extension UInt32: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        entry.uint32
+    }
+}
+
+extension UInt64: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        entry.uint64
+    }
+}
+
+extension Data: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        .init(bytes: entry.bytes, count: Int(entry.data_size))
+    }
+}
+
+extension UnsafePointer: MMDB.DataValue {
+    public static func value(from entry: MMDB_entry_data_s) -> Self {
+        // .init(entry.pointer.assumingMemoryBound(to: Pointee.self))
+        fatalError("unimplemented")
+    }
+}
+
+private func makePath(_ lookupKeys: [String]) -> UnsafePointer<UnsafePointer<CChar>?>? {
+    let stringArray: [UnsafePointer<CChar>?] = lookupKeys
+        .map({ str in
+            let cString = str.utf8CString
+            let cStringCopy = UnsafeMutableBufferPointer<CChar>
+                .allocate(capacity: cString.count)
+            _ = cStringCopy.initialize(from: cString)
+            return UnsafePointer(cStringCopy.baseAddress)
+        }) + [nil]
+
+    // allocate enough space for all pointers in stringArray and initialize it
+    let stringMutableBufferPointer: UnsafeMutableBufferPointer<UnsafePointer<CChar>?> =
+        .allocate(capacity: stringArray.count)
+    _ = stringMutableBufferPointer.initialize(from: stringArray)
+
+    // get baseAddress as an UnsafePointer<UnsafePointer<CChar>?>?
+    let address = UnsafePointer(stringMutableBufferPointer.baseAddress)
+    return address
 }
