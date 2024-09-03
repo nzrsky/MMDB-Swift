@@ -259,7 +259,7 @@ extension MMDB {
         case unknown
 
         private static let mapping: [Int32: GetAddrInfoError] = {
-            #if os(macOS)
+            #if canImport(Darwin)
             [
                 EAI_AGAIN : .again,
                 EAI_BADFLAGS : .badFlags,
