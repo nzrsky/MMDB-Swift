@@ -270,11 +270,7 @@ extension MMDB {
                 EAI_SERVICE : .service,
                 EAI_SOCKTYPE : .sockType,
                 EAI_SYSTEM : .system,
-                EAI_OVERFLOW : .overflow,
-//                EAI_NODATA : .nodata,
-//                EAI_ADDRFAMILY : .addrFamily,
-//                EAI_BADHINTS : .badHints,
-//                EAI_PROTOCOL : .protocol
+                EAI_OVERFLOW : .overflow
             ]
             #else
             [
@@ -287,14 +283,7 @@ extension MMDB {
                 EAI_SERVICE : .service,
                 EAI_SOCKTYPE : .sockType,
                 EAI_SYSTEM : .system,
-                EAI_OVERFLOW : .overflow,
-
-                // EAI_INPROGRESS : .inProgress,
-                // EAI_CANCELED : .canceled,
-                // EAI_NOTCANCELED : .notCanceled,
-                // EAI_ALLDONE : .allDone,
-                // EAI_INTR : .interrupted,
-                // EAI_IDN_ENCODE : .idnEncode
+                EAI_OVERFLOW : .overflow
             ]
             #endif
         }()
