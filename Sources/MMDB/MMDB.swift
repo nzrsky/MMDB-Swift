@@ -271,10 +271,10 @@ extension MMDB {
                 EAI_SOCKTYPE : .sockType,
                 EAI_SYSTEM : .system,
                 EAI_OVERFLOW : .overflow,
-                EAI_NODATA : .nodata,
-                EAI_ADDRFAMILY : .addrFamily,
-                EAI_BADHINTS : .badHints,
-                EAI_PROTOCOL : .protocol
+//                EAI_NODATA : .nodata,
+//                EAI_ADDRFAMILY : .addrFamily,
+//                EAI_BADHINTS : .badHints,
+//                EAI_PROTOCOL : .protocol
             ]
             #else
             [
