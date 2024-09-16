@@ -25,7 +25,8 @@ let package = Package(
             name: "\(name)Tests",
             dependencies: [.target(name: name)],
             resources: [
-                .copy("Resources/GeoLite2-Country.mmdb")
+                .copy("Resources/GeoLite2-Country.mmdb"),
+                .copy("Resources/GeoLite2-City.mmdb")
             ]
         )
     ]

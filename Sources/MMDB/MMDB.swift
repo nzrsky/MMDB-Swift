@@ -17,6 +17,10 @@ public final class MMDB {
         public let iso: String
     }
 
+    public struct Region {
+        public let iso: String
+    }
+
     public enum DataType: UInt32 {
         case extended = 0
         case pointer = 1
@@ -83,7 +87,9 @@ public final class MMDB {
                 throw MMDB.MMDBError(rawValue: status) ?? .unknown
             }
 
+            #if DEBUG
             try? dump()
+            #endif
         }
 
         deinit {
@@ -184,6 +190,7 @@ extension MMDB.LookupResult {
         
         var pathKeys = allocPathKeys("country", "iso_code", nil)
         let status = MMDB_aget_value(&result.entry, &entry, &pathKeys)
+        
         defer { deallocPathKeys(pathKeys) }
 
         guard status == MMDB_SUCCESS else {
@@ -196,6 +203,26 @@ extension MMDB.LookupResult {
         }
 
         return .init(iso: iso)
+    }
+
+    public func region() throws -> MMDB.Region? {
+        var entry = MMDB_entry_data_s()
+        
+        var pathKeys = allocPathKeys("subdivisions", "0", "iso_code", nil)
+        let status = MMDB_aget_value(&result.entry, &entry, &pathKeys)
+        
+        defer { deallocPathKeys(pathKeys) }
+
+        guard status == MMDB_SUCCESS else {
+            printErr("error: lookup failed: \(String(validatingUTF8: MMDB_strerror(status)) ?? "#\(status)")")
+            throw MMDB.MMDBError(rawValue: status) ?? .unknown
+        }
+
+        guard let regionCode = Entry(value: entry).value() as? String else {
+            return nil
+        }
+
+        return .init(iso: regionCode)
     }
 
     private func allocPathKeys(_ args: String?...) -> [UnsafePointer<CChar>?] {
@@ -364,22 +391,26 @@ extension UnsafePointer: MMDBDataValue {
     }
 }
 
-private func makePath(_ lookupKeys: [String]) -> UnsafePointer<UnsafePointer<CChar>?>? {
-    let stringArray: [UnsafePointer<CChar>?] = lookupKeys
-        .map({ str in
-            let cString = str.utf8CString
-            let cStringCopy = UnsafeMutableBufferPointer<CChar>
-                .allocate(capacity: cString.count)
-            _ = cStringCopy.initialize(from: cString)
-            return UnsafePointer(cStringCopy.baseAddress)
-        }) + [nil]
-
-    // allocate enough space for all pointers in stringArray and initialize it
-    let stringMutableBufferPointer: UnsafeMutableBufferPointer<UnsafePointer<CChar>?> =
-        .allocate(capacity: stringArray.count)
-    _ = stringMutableBufferPointer.initialize(from: stringArray)
-
-    // get baseAddress as an UnsafePointer<UnsafePointer<CChar>?>?
-    let address = UnsafePointer(stringMutableBufferPointer.baseAddress)
-    return address
-}
+//private func makePath(_ lookupKeys: [String]) -> UnsafePointer<UnsafePointer<CChar>?>? {
+//    let stringArray: [UnsafePointer<CChar>?] = lookupKeys
+//        .map({ str in
+//            let cString = str.utf8CString
+//            let cStringCopy = UnsafeMutableBufferPointer<CChar>
+//                .allocate(capacity: cString.count)
+//            _ = cStringCopy.initialize(from: cString)
+//            return UnsafePointer(cStringCopy.baseAddress)
+//        }) + [nil]
+//
+//    defer {
+//        for string in stringArray {
+//            string?.deallocate()
+//        }
+//    }
+//
+//    let stringMutableBufferPointer: UnsafeMutableBufferPointer<UnsafePointer<CChar>?> =
+//        .allocate(capacity: stringArray.count)
+//    _ = stringMutableBufferPointer.initialize(from: stringArray)
+//
+//    let address = UnsafePointer(stringMutableBufferPointer.baseAddress)
+//    return address
+//}

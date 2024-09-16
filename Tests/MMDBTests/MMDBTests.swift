@@ -23,13 +23,32 @@ class MMDBTests: XCTestCase {
 
         XCTAssertEqual(try db.lookup(ip: "84.38.138.44")?.country()?.iso, "LV")
     }
+
+    func testStates() throws {
+        let db = try MMDB.open(kind: .city)
+        XCTAssertEqual(try db.lookup(ip: "172.217.7.206")?.country()?.iso, "US")
+        XCTAssertEqual(try db.lookup(ip: "72.229.28.185")?.country()?.iso, "US")
+        XCTAssertEqual(try db.lookup(ip: "162.89.8.255")?.country()?.iso, "US")
+
+        XCTAssertEqual(try? db.lookup(ip: "172.217.7.206")?.region()?.iso, nil)
+        XCTAssertEqual(try db.lookup(ip: "72.229.28.185")?.region()?.iso, "NY")
+        XCTAssertEqual(try db.lookup(ip: "162.89.8.255")?.region()?.iso, "TX")
+
+        XCTAssertEqual(try db.lookup(ip: "15.207.13.28")?.region()?.iso, "MH")
+        XCTAssertEqual(try db.lookup(ip: "84.38.138.44")?.region()?.iso, "RIX")
+    }
 }
 
 private extension MMDB {
-    static func open() throws -> MMDB {
+    enum Kind: String  {
+        case city = "GeoLite2-City"
+        case country = "GeoLite2-Country"
+    }
+
+    static func open(kind: Kind = .country) throws -> MMDB {
         let bundle = Bundle.module
-        guard let fileURL = bundle.url(forResource: "GeoLite2-Country", withExtension: "mmdb") else {
-            fatalError("Missing file: GeoLite2-Country.mmdb")
+        guard let fileURL = bundle.url(forResource: kind.rawValue, withExtension: "mmdb") else {
+            fatalError("Missing file: \(kind.rawValue).mmdb")
         }
 
         return try MMDB(fileURL.path)
