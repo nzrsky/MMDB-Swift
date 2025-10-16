@@ -63,11 +63,9 @@ public final class MMDB {
 
         guard mmdbStatus == MMDB_SUCCESS else {
             guard gaiError == 0 else {
-                printErr("error: getaddrinfo failed: \(String(validatingUTF8: gai_strerror(gaiError)) ?? "#\(gaiError)")")
                 throw MMDB.GetAddrInfoError(int32: gaiError)
             }
 
-            printErr("error: lookup failed: \(String(validatingUTF8: MMDB_strerror(mmdbStatus)) ?? "#\(mmdbStatus)")")
             throw MMDBError(rawValue: mmdbStatus) ?? .unknown
         }
 
@@ -83,7 +81,6 @@ public final class MMDB {
 
             let status = MMDB_get_entry_data_list(&self.result.entry, &entryDataList)
             guard status == MMDB_SUCCESS else {
-                printErr("error: lookup failed: \(String(validatingUTF8: MMDB_strerror(status)) ?? "#\(status)")")
                 throw MMDB.MMDBError(rawValue: status) ?? .unknown
             }
 
@@ -194,7 +191,6 @@ extension MMDB.LookupResult {
         defer { deallocPathKeys(pathKeys) }
 
         guard status == MMDB_SUCCESS else {
-            printErr("error: lookup failed: \(String(validatingUTF8: MMDB_strerror(status)) ?? "#\(status)")")
             throw MMDB.MMDBError(rawValue: status) ?? .unknown
         }
 
@@ -207,14 +203,13 @@ extension MMDB.LookupResult {
 
     public func region() throws -> MMDB.Region? {
         var entry = MMDB_entry_data_s()
-        
+
         var pathKeys = allocPathKeys("subdivisions", "0", "iso_code", nil)
         let status = MMDB_aget_value(&result.entry, &entry, &pathKeys)
-        
+
         defer { deallocPathKeys(pathKeys) }
 
         guard status == MMDB_SUCCESS else {
-            printErr("error: lookup failed: \(String(validatingUTF8: MMDB_strerror(status)) ?? "#\(status)")")
             throw MMDB.MMDBError(rawValue: status) ?? .unknown
         }
 
